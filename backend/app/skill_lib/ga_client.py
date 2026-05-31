@@ -45,20 +45,54 @@ class GoogleAnalyticsClient:
                 "Find your property ID in GA4: Admin > Property Settings"
             )
 
+        # Two ways to supply credentials:
+        #  1. GOOGLE_APPLICATION_CREDENTIALS_JSON -- the service account key as
+        #     inline JSON (or base64-encoded JSON). Ideal for serverless hosts
+        #     like Vercel where you cannot ship a key file.
+        #  2. GOOGLE_APPLICATION_CREDENTIALS -- path to the key file (ADC).
+        credentials_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
         credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-        if not credentials_path:
-            raise ValueError(
-                "GOOGLE_APPLICATION_CREDENTIALS environment variable not set. "
-                "Set it to the path of your service account JSON file."
-            )
 
-        if not os.path.exists(credentials_path):
-            raise FileNotFoundError(
-                "Service account file not found: {}".format(credentials_path)
+        client_kwargs = {}
+        if credentials_json:
+            import json
+            import base64
+
+            raw = credentials_json.strip()
+            # Accept base64-encoded JSON too (some secret stores prefer it).
+            if not raw.startswith("{"):
+                try:
+                    raw = base64.b64decode(raw).decode("utf-8")
+                except Exception:
+                    pass
+            try:
+                info = json.loads(raw)
+            except Exception as exc:
+                raise ValueError(
+                    "GOOGLE_APPLICATION_CREDENTIALS_JSON is not valid JSON: "
+                    "{}".format(exc)
+                )
+
+            from google.oauth2 import service_account
+
+            client_kwargs["credentials"] = (
+                service_account.Credentials.from_service_account_info(info)
+            )
+        elif credentials_path:
+            if not os.path.exists(credentials_path):
+                raise FileNotFoundError(
+                    "Service account file not found: {}".format(credentials_path)
+                )
+            # BetaAnalyticsDataClient() picks the file up via ADC automatically.
+        else:
+            raise ValueError(
+                "No credentials configured. Set GOOGLE_APPLICATION_CREDENTIALS_JSON "
+                "(inline JSON -- ideal for Vercel) or GOOGLE_APPLICATION_CREDENTIALS "
+                "(path to the service account key file)."
             )
 
         try:
-            self.client = BetaAnalyticsDataClient()
+            self.client = BetaAnalyticsDataClient(**client_kwargs)
         except Exception as exc:
             raise RuntimeError(
                 "Failed to initialize Google Analytics client: {}\n"

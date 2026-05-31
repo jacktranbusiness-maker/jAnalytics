@@ -57,6 +57,10 @@ class Settings:
         self.credentials_path: str = os.environ.get(
             "GOOGLE_APPLICATION_CREDENTIALS", ""
         )
+        # Inline service-account JSON (preferred on serverless hosts like Vercel).
+        self.credentials_json: str = os.environ.get(
+            "GOOGLE_APPLICATION_CREDENTIALS_JSON", ""
+        )
 
         # Human-friendly label shown in the UI header.
         self.site_name: str = os.environ.get("SITE_NAME", "My Website")
@@ -82,7 +86,9 @@ class Settings:
             "mock_mode": self.mock_mode,
             "site_name": self.site_name,
             "property_id_configured": bool(self.property_id),
-            "credentials_configured": bool(self.credentials_path),
+            "credentials_configured": bool(
+                self.credentials_path or self.credentials_json
+            ),
             "cors_origins": self.cors_origins,
             "api_version": self.api_version,
         }

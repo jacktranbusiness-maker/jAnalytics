@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GA4 Analytics Dashboard — Overview Preview</title>
+    <!--
+      Self-contained, dependency-free PREVIEW of the real Next.js + shadcn UI.
+      Overview now leads with Realtime + Audience + Top traffic sources, with
+      the other KPIs shrunk into a compact strip below. The real app uses
+      React + Recharts + Framer Motion + a FastAPI backend; this single file
+      fakes the same look + micro-animations (incl. a simulated live realtime
+      feed) so you can eyeball it.
+    -->
+    <style>
+      :root {
+        --background: 0 0% 100%;
+        --foreground: 222 47% 11%;
+        --card: 0 0% 100%;
+        --muted: 220 14% 96%;
+        --muted-foreground: 220 9% 46%;
+        --primary: 243 75% 59%;
+        --primary-foreground: 0 0% 100%;
+        --accent: 243 75% 96%;
+        --accent-foreground: 243 60% 35%;
+        --border: 220 13% 91%;
+        --success: 142 71% 40%;
+        --destructive: 0 72% 51%;
+        --warning: 38 92% 50%;
+        --radius: 0.75rem;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: hsl(var(--background)); color: hsl(var(--foreground)); -webkit-font-smoothing: antialiased;
+      }
+      .app { display: flex; min-height: 100vh; }
+
+      .sidebar { width: 256px; flex-shrink: 0; border-right: 1px solid hsl(var(--border)); background: hsl(var(--card) / 0.4); padding: 20px 12px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+      .brand { display: flex; gap: 10px; align-items: center; padding: 0 12px 24px; }
+      .brand .logo { width: 36px; height: 36px; border-radius: 10px; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); display: grid; place-items: center; }
+      .brand .t1 { font-size: 14px; font-weight: 600; }
+      .brand .t2 { font-size: 12px; color: hsl(var(--muted-foreground)); }
+      .nav { display: flex; flex-direction: column; gap: 4px; }
+      .nav a { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; font-size: 14px; font-weight: 500; text-decoration: none; color: hsl(var(--muted-foreground)); transition: background .15s, color .15s; }
+      .nav a:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+      .nav a.active { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+      .sidebar .foot { margin-top: auto; border: 1px solid hsl(var(--border)); border-radius: 10px; padding: 12px; font-size: 12px; color: hsl(var(--muted-foreground)); }
+      .sidebar .foot b { color: hsl(var(--foreground)); }
+
+      .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+      .topbar { position: sticky; top: 0; z-index: 5; height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 32px; border-bottom: 1px solid hsl(var(--border)); background: hsl(var(--background) / 0.8); backdrop-filter: blur(8px); }
+      .topbar h1 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+      .row { display: flex; align-items: center; gap: 10px; }
+      .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; border: 1px solid transparent; }
+      .badge.warning { background: hsl(var(--warning) / 0.15); color: hsl(var(--warning)); }
+      .select, .iconbtn { height: 36px; border: 1px solid hsl(var(--border)); border-radius: 8px; background: hsl(var(--background)); display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 14px; color: hsl(var(--foreground)); }
+      .iconbtn { width: 36px; justify-content: center; padding: 0; cursor: pointer; }
+
+      .content { padding: 24px 32px; display: flex; flex-direction: column; gap: 24px; }
+      .muted { color: hsl(var(--muted-foreground)); font-size: 14px; margin: 0; }
+      .grid { display: grid; gap: 24px; }
+      .two { grid-template-columns: 1fr 1fr; }
+      .sources-row { grid-template-columns: 2fr 1fr; }
+      @media (max-width: 1024px) { .two, .sources-row { grid-template-columns: 1fr; } }
+
+      .card { border: 1px solid hsl(var(--border)); border-radius: var(--radius); background: hsl(var(--card)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.04); }
+      .card .head { padding: 18px 20px 0; display: flex; align-items: center; justify-content: space-between; }
+      .card .title { font-size: 15px; font-weight: 600; }
+      .card .body { padding: 18px 20px 20px; }
+
+      /* Realtime */
+      .pulse { position: relative; display: inline-flex; width: 10px; height: 10px; }
+      .pulse i { position: absolute; inset: 0; border-radius: 999px; background: hsl(var(--success)); }
+      .pulse i.ping { animation: ping 1.4s cubic-bezier(0,0,.2,1) infinite; }
+      @keyframes ping { 75%,100% { transform: scale(2.2); opacity: 0; } }
+      .rt-num { font-size: 40px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+      .rt-sub { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: hsl(var(--muted-foreground)); margin-top: 6px; }
+      .spark { display: flex; align-items: flex-end; gap: 3px; height: 64px; margin-top: 16px; }
+      .spark > span { flex: 1; border-radius: 3px; background: hsl(var(--primary) / 0.7); transition: height .5s cubic-bezier(.2,.7,.2,1); }
+      .spark > span.now { background: hsl(var(--success)); }
+      .spark-x { display: flex; justify-content: space-between; font-size: 10px; color: hsl(var(--muted-foreground)); margin-top: 4px; }
+
+      .seg { display: inline-flex; gap: 4px; background: hsl(var(--muted)); padding: 4px; border-radius: 10px; margin: 14px 0 10px; }
+      .seg button { border: 0; background: transparent; font-size: 12px; font-weight: 500; color: hsl(var(--muted-foreground)); padding: 4px 10px; border-radius: 7px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+      .seg button.active { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+
+      ul.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+      ul.list li { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+      ul.list .lbl { width: 120px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: capitalize; }
+      ul.list .track { flex: 1; height: 6px; border-radius: 999px; background: hsl(var(--muted)); overflow: hidden; }
+      ul.list .track > span { display: block; height: 100%; border-radius: 999px; background: hsl(var(--primary)); width: 0; transition: width .8s cubic-bezier(.2,.7,.2,1); }
+      ul.list .val { width: 40px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+      /* Audience */
+      .mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+      .mini { border: 1px solid hsl(var(--border)); border-radius: 10px; padding: 12px; }
+      .mini .l { font-size: 12px; color: hsl(var(--muted-foreground)); display: flex; align-items: center; gap: 6px; }
+      .mini .v { font-size: 20px; font-weight: 700; margin-top: 4px; letter-spacing: -0.02em; }
+      .stack { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: hsl(var(--muted)); margin-top: 6px; }
+      .stack > span { height: 100%; width: 0; transition: width .9s cubic-bezier(.2,.7,.2,1); }
+      .legend { display: flex; gap: 16px; margin-top: 8px; font-size: 12px; }
+      .legend .dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; margin-right: 6px; vertical-align: middle; }
+      .sec-title { font-size: 13px; font-weight: 500; color: hsl(var(--muted-foreground)); margin: 0 0 -8px; }
+
+      /* Sources table */
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: hsl(var(--muted-foreground)); font-weight: 500; padding: 8px 12px; border-bottom: 1px solid hsl(var(--border)); }
+      td { padding: 11px 12px; border-bottom: 1px solid hsl(var(--border)); }
+      tr:last-child td { border-bottom: 0; }
+      .src .s1 { font-weight: 500; }
+      .src .s2 { font-size: 12px; color: hsl(var(--muted-foreground)); }
+      .bar { height: 6px; width: 56px; border-radius: 999px; background: hsl(var(--muted)); overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 8px; }
+      .bar > span { display: block; height: 100%; background: hsl(var(--primary)); border-radius: 999px; width: 0; transition: width .9s cubic-bezier(.2,.7,.2,1); }
+      .tnum { font-variant-numeric: tabular-nums; }
+      .right { text-align: right; }
+
+      /* Compact KPI strip */
+      .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+      @media (max-width: 1024px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+      .kpi { border: 1px solid hsl(var(--border)); border-radius: 10px; background: hsl(var(--card)); padding: 14px; }
+      .kpi .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .kpi .l { font-size: 12px; color: hsl(var(--muted-foreground)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .kpi .v { font-size: 18px; font-weight: 700; margin-top: 4px; letter-spacing: -0.02em; }
+      .delta { display: inline-flex; align-items: center; gap: 2px; border-radius: 999px; padding: 1px 6px; font-size: 11px; font-weight: 600; }
+      .delta.up { background: hsl(var(--success) / 0.15); color: hsl(var(--success)); }
+      .delta.down { background: hsl(var(--destructive) / 0.1); color: hsl(var(--destructive)); }
+
+      .reveal { opacity: 0; transform: translateY(12px); animation: fadeUp .5s cubic-bezier(.2,.7,.2,1) forwards; }
+      @keyframes fadeUp { to { opacity: 1; transform: none; } }
+      .icon { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      .icon.sm { width: 13px; height: 13px; }
+      .pillNote { font-size: 11px; color: hsl(var(--muted-foreground)); text-align: center; padding: 6px; }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="logo"><svg class="icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg></div>
+          <div><div class="t1">Analytics</div><div class="t2">GA4 Dashboard</div></div>
+        </div>
+        <nav class="nav">
+          <a class="active" href="#"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg> Overview</a>
+          <a href="#"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49"/></svg> Traffic Sources</a>
+          <a href="#"><svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg> Content</a>
+          <a href="#"><svg class="icon" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg> Devices</a>
+        </nav>
+        <div class="foot">Reusing the <b>google-analytics</b> skill for analysis &amp; recommendations.</div>
+      </aside>
+
+      <div class="main">
+        <header class="topbar">
+          <div class="row"><h1>Overview</h1><span class="badge warning">● Mock data</span></div>
+          <div class="row">
+            <span class="select"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> Last 30 days</span>
+            <span class="iconbtn" title="Refresh"><svg class="icon" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg></span>
+          </div>
+        </header>
+
+        <section class="content">
+          <p class="muted reveal">Live activity, where your visitors come from, and who they are.</p>
+
+          <!-- HERO: Realtime + Audience -->
+          <div class="grid two">
+            <!-- Realtime -->
+            <div class="card reveal">
+              <div class="head">
+                <span class="row"><span class="pulse"><i class="ping"></i><i></i></span><span class="title">Realtime</span></span>
+                <span class="muted" style="font-size:12px">last 30 min</span>
+              </div>
+              <div class="body">
+                <div class="rt-num" id="rtNum">0</div>
+                <div class="rt-sub">active users right now</div>
+                <div class="spark" id="spark"></div>
+                <div class="spark-x"><span>30 min ago</span><span>now</span></div>
+                <div class="seg" id="rtTabs">
+                  <button class="active" data-t="pages"><svg class="icon sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Pages</button>
+                  <button data-t="countries"><svg class="icon sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20"/></svg>Countries</button>
+                  <button data-t="devices"><svg class="icon sm" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="12" rx="2"/><path d="M8 20h8"/></svg>Devices</button>
+                </div>
+                <ul class="list" id="rtList"></ul>
+              </div>
+            </div>
+
+            <!-- Audience -->
+            <div class="card reveal" style="animation-delay:.05s">
+              <div class="head">
+                <span class="row"><svg class="icon" viewBox="0 0 24 24" style="color:hsl(var(--primary))"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="title">Audience</span></span>
+                <span class="muted" style="font-size:12px">Last 30 days</span>
+              </div>
+              <div class="body">
+                <div class="mini-grid">
+                  <div class="mini"><div class="l">Active users</div><div class="v" data-count="9630">0</div></div>
+                  <div class="mini"><div class="l">New users</div><div class="v" data-count="6037">0</div></div>
+                </div>
+                <p class="muted" style="font-size:12px;margin:16px 0 0;font-weight:500">New vs returning</p>
+                <div class="stack">
+                  <span id="segNew" style="background:hsl(var(--primary))"></span>
+                  <span id="segRet" style="background:hsl(var(--primary) / 0.4)"></span>
+                </div>
+                <div class="legend">
+                  <span><span class="dot" style="background:hsl(var(--primary))"></span>New <b>63%</b></span>
+                  <span><span class="dot" style="background:hsl(var(--primary) / 0.4)"></span>Returning <b>37%</b></span>
+                </div>
+                <p class="muted" style="font-size:12px;margin:18px 0 8px;font-weight:500">Top countries</p>
+                <ul class="list" id="countryList"></ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Top traffic sources + insights -->
+          <div class="grid sources-row">
+            <div class="card reveal" style="animation-delay:.1s">
+              <div class="head"><span class="title">Top traffic sources</span></div>
+              <div class="body" style="padding-top:6px">
+                <table>
+                  <thead><tr><th>Source / Medium</th><th class="right">Sessions</th><th class="right">Engagement</th><th class="right">Bounce</th><th class="right">Conv. rate</th></tr></thead>
+                  <tbody id="sources"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="card reveal" style="animation-delay:.15s">
+              <div class="head"><span class="title">✨ Insights</span></div>
+              <div class="body">
+                <ul class="list" style="display:block">
+                  <li style="margin-bottom:8px">• Sessions: increased by 8.0%</li>
+                  <li style="margin-bottom:8px">• New Users: increased by 11.8%</li>
+                  <li style="margin-bottom:8px">• Page Views: increased by 11.0%</li>
+                  <li style="margin-bottom:8px">• Bounce Rate: decreased by 9.8%</li>
+                  <li>• Engagement Rate: increased by 8.8%</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Compact KPI strip -->
+          <p class="sec-title reveal">All metrics · Last 30 days</p>
+          <div class="kpis" id="kpis"></div>
+
+          <div class="pillNote">Static preview · realtime feed is simulated · real app = Next.js 14 + shadcn/ui + Recharts + Framer Motion + FastAPI</div>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      const nf = new Intl.NumberFormat("en-US");
+      const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+
+      // ----- count-up for audience + kpis -----
+      function countUp(el, target, fmt) {
+        const dur = 1000, t0 = performance.now();
+        (function step(now) {
+          const p = Math.min((now - t0) / dur, 1), e = 1 - Math.pow(1 - p, 3);
+          el.textContent = fmt(target * e);
+          if (p < 1) requestAnimationFrame(step);
+        })(t0);
+      }
+      setTimeout(() => {
+        document.querySelectorAll("[data-count]").forEach((el) =>
+          countUp(el, +el.dataset.count, (n) => nf.format(Math.round(n)))
+        );
+      }, 250);
+
+      // ----- Realtime (simulated live feed) -----
+      const RT = {
+        pages: [["Home", .34], ["Pricing", .24], ["GA4 Guide", .18], ["Features", .14], ["Checkout", .10]],
+        countries: [["United States", .34], ["India", .24], ["United Kingdom", .18], ["Germany", .14], ["Vietnam", .10]],
+        devices: [["mobile", .55], ["desktop", .38], ["tablet", .07]],
+      };
+      let rtTab = "pages";
+      const sparkEl = document.getElementById("spark");
+      for (let i = 0; i < 30; i++) { const s = document.createElement("span"); if (i === 29) s.className = "now"; sparkEl.appendChild(s); }
+
+      function renderList(active) {
+        const data = RT[rtTab];
+        const max = Math.max.apply(null, data.map((d) => Math.round(active * d[1]))) || 1;
+        const el = document.getElementById("rtList");
+        el.innerHTML = data.map((d) => {
+          const v = Math.max(0, Math.round(active * d[1]));
+          return '<li><span class="lbl">' + d[0] + '</span><span class="track"><span style="width:' + (v / max * 100) + '%"></span></span><span class="val">' + v + '</span></li>';
+        }).join("");
+      }
+      function tickRealtime() {
+        const active = 38 + Math.floor(Math.random() * 22) - 6;
+        document.getElementById("rtNum").textContent = nf.format(active);
+        const bars = sparkEl.children;
+        for (let i = 0; i < bars.length; i++) bars[i].style.height = Math.max(6, Math.random() * 100) + "%";
+        renderList(active);
+      }
+      document.getElementById("rtTabs").addEventListener("click", (e) => {
+        const b = e.target.closest("button"); if (!b) return;
+        document.querySelectorAll("#rtTabs button").forEach((x) => x.classList.remove("active"));
+        b.classList.add("active"); rtTab = b.dataset.t;
+        renderList(+document.getElementById("rtNum").textContent.replace(/,/g, "") || 40);
+      });
+      setTimeout(tickRealtime, 200);
+      setInterval(tickRealtime, 3000);
+
+      // ----- Audience: new vs returning + countries -----
+      setTimeout(() => { document.getElementById("segNew").style.width = "63%"; document.getElementById("segRet").style.width = "37%"; }, 350);
+      const COUNTRIES = [["United States", 3650], ["India", 1720], ["United Kingdom", 1150], ["Germany", 870], ["Vietnam", 720]];
+      const maxC = Math.max.apply(null, COUNTRIES.map((c) => c[1]));
+      document.getElementById("countryList").innerHTML = COUNTRIES.map((c) =>
+        '<li><span class="lbl">' + c[0] + '</span><span class="track"><span data-w="' + (c[1] / maxC * 100) + '"></span></span><span class="val">' + compact.format(c[1]) + '</span></li>'
+      ).join("");
+
+      // ----- Sources -----
+      const SOURCES = [
+        ["google", "organic", 5200, 68, 38, 5.4],
+        ["(direct)", "(none)", 3100, 61, 45, 4.8],
+        ["google", "cpc", 1850, 55, 52, 1.0],
+        ["facebook", "social", 1200, 41, 66, 0.8],
+        ["newsletter", "email", 980, 74, 31, 9.0],
+        ["bing", "organic", 540, 60, 47, 4.1],
+      ];
+      const maxS = Math.max.apply(null, SOURCES.map((s) => s[2]));
+      document.getElementById("sources").innerHTML = SOURCES.map((s) =>
+        '<tr class="src"><td><div class="s1">' + s[0] + '</div><div class="s2">' + s[1] + '</div></td>' +
+        '<td class="right tnum"><span class="bar"><span data-w="' + (s[2] / maxS * 100) + '"></span></span>' + nf.format(s[2]) + '</td>' +
+        '<td class="right tnum">' + s[3].toFixed(1) + '%</td>' +
+        '<td class="right tnum">' + s[4].toFixed(1) + '%</td>' +
+        '<td class="right tnum" style="font-weight:600;color:' + (s[5] >= 3 ? "hsl(142 71% 40%)" : "inherit") + '">' + s[5].toFixed(1) + '%</td></tr>'
+      ).join("");
+
+      // ----- Compact KPI strip -----
+      const KPIS = [
+        ["Sessions", 13080, 8.0, true], ["Active Users", 9630, 7.0, true], ["New Users", 6037, 11.8, true], ["Page Views", 33300, 11.0, true],
+        ["Bounce Rate", "41.5%", -9.8, true], ["Engagement", "67.5%", 8.8, true], ["Avg. Session", "2m 29s", 5.0, true], ["Conversions", 496, 7.8, true],
+      ];
+      document.getElementById("kpis").innerHTML = KPIS.map((k) => {
+        const v = typeof k[1] === "number" ? compact.format(k[1]) : k[1];
+        const up = k[2] >= 0;
+        return '<div class="kpi reveal"><div class="top"><span class="l">' + k[0] + '</span>' +
+          '<span class="delta ' + (k[3] ? "up" : "down") + '">' + (up ? "▲" : "▼") + " " + (k[2] > 0 ? "+" : "") + k[2].toFixed(1) + '%</span></div>' +
+          '<div class="v">' + v + '</div></div>';
+      }).join("");
+
+      // animate all width bars
+      setTimeout(() => document.querySelectorAll("[data-w]").forEach((b) => (b.style.width = b.dataset.w + "%")), 450);
+    </script>
+  </body>
+</html>

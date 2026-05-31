@@ -1,0 +1,7 @@
+# Web framework
+fastapi>=0.110
+uvicorn[standard]>=0.29
+
+# Google Analytics 4 Data API (only needed when MOCK_MODE=false)
+google-analytics-data>=0.18
+python-dotenv>=1.0

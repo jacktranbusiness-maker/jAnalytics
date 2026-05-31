@@ -72,6 +72,12 @@ class Settings:
         self.cors_origins: List[str] = [
             o.strip() for o in origins.split(",") if o.strip()
         ]
+        # Regex allowing any matching origin (in addition to the list above).
+        # Defaults to any *.vercel.app preview/production domain so a Vercel
+        # frontend works out of the box. Set CORS_ORIGIN_REGEX="" to disable.
+        self.cors_origin_regex: str = os.environ.get(
+            "CORS_ORIGIN_REGEX", r"https://.*\.vercel\.app"
+        )
 
         self.api_title: str = "GA4 Analytics Dashboard API"
         self.api_version: str = "0.1.0"
@@ -90,6 +96,7 @@ class Settings:
                 self.credentials_path or self.credentials_json
             ),
             "cors_origins": self.cors_origins,
+            "cors_origin_regex": self.cors_origin_regex,
             "api_version": self.api_version,
         }
 

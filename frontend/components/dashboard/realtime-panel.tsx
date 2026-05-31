@@ -79,7 +79,7 @@ export function RealtimePanel({ data }: { data: RealtimeResponse }) {
                   key={p.minutes_ago}
                   className={cn(
                     "flex-1 rounded-sm",
-                    isNow ? "bg-success" : "bg-primary/70",
+                    isNow ? "bg-success" : "bg-success/50",
                   )}
                   initial={{ height: 0 }}
                   animate={{

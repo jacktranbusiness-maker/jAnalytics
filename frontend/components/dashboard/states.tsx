@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function ErrorState({ message }: { message: string }) {
+  const isQuotaError = /429|quota|exhausted property tokens/i.test(message);
+
   return (
     <Card className="border-destructive/30 bg-destructive/5">
       <CardContent className="flex items-start gap-3 p-6">
@@ -15,13 +17,20 @@ export function ErrorState({ message }: { message: string }) {
             Could not load analytics data
           </p>
           <p className="mt-1 text-sm text-muted-foreground">{message}</p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Is the backend running at{" "}
-            <code className="rounded bg-muted px-1">
-              {process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"}
-            </code>
-            ?
-          </p>
+          {isQuotaError ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Realtime polling is paused while Google Analytics quota recovers.
+              The next retry is scheduled automatically.
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Is the backend running at{" "}
+              <code className="rounded bg-muted px-1">
+                {process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"}
+              </code>
+              ?
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>

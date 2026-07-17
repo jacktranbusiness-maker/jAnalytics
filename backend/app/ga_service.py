@@ -12,7 +12,9 @@ Responsibilities:
 Stdlib + skill_lib only -- importable and testable without fastapi/pydantic.
 """
 
-from typing import Dict, List, Optional
+import time
+from threading import Lock
+from typing import Dict, List, Optional, Tuple
 
 from .config import get_settings
 from .skill_lib import AnalyticsAnalyzer
@@ -32,6 +34,24 @@ OVERVIEW_METRICS = [
 
 class GAServiceError(RuntimeError):
     """Raised when analytics data cannot be produced."""
+
+
+class GAQuotaError(GAServiceError):
+    """Raised when Google Analytics rejects a request because of quota."""
+
+
+_realtime_cache: Tuple[Optional[Dict], float, float] = (None, 0.0, 0.0)
+_realtime_cache_lock = Lock()
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return (
+        "429" in message
+        or "resourceexhausted" in message
+        or "exhausted property tokens" in message
+        or "quota" in message
+    )
 
 
 def _build_client():
@@ -151,7 +171,41 @@ def get_realtime() -> Dict:
 
     Mirrors how the real Realtime API is queried: one call per breakdown.
     """
-    client = get_analyzer().client
+    global _realtime_cache
+    settings = get_settings()
+    now = time.monotonic()
+    cached, expires_at, stale_until = _realtime_cache
+
+    if cached is not None and now < expires_at:
+        return cached
+
+    # Prevent simultaneous browser tabs from fanning out into multiple sets of
+    # GA4 requests on the same backend instance.
+    with _realtime_cache_lock:
+        cached, expires_at, stale_until = _realtime_cache
+        now = time.monotonic()
+        if cached is not None and now < expires_at:
+            return cached
+
+        try:
+            return _fetch_realtime(
+                get_analyzer().client,
+                settings.realtime_cache_ttl_seconds,
+                settings.realtime_stale_ttl_seconds,
+            )
+        except Exception as exc:
+            # During a temporary quota outage, stale realtime data is more
+            # useful than replacing the whole panel with an error.
+            if cached is not None and now < stale_until:
+                return cached
+            if _is_quota_error(exc):
+                raise GAQuotaError(str(exc)) from exc
+            raise
+
+
+def _fetch_realtime(client, cache_ttl: int, stale_ttl: int) -> Dict:
+    """Fetch and cache one realtime snapshot."""
+    global _realtime_cache
 
     def _au(report: Dict) -> int:
         totals = report.get("totals") or []
@@ -168,7 +222,7 @@ def get_realtime() -> Dict:
     pages = client.run_realtime_report(
         metrics=["activeUsers"],
         dimensions=["unifiedScreenName"],
-        limit=5,
+        limit=8,
         order_by="-activeUsers",
     )
     countries = client.run_realtime_report(
@@ -207,13 +261,16 @@ def get_realtime() -> Dict:
             for r in report["rows"]
         ]
 
-    return {
+    result = {
         "active_users": _au(total),
         "per_minute": per_minute,
         "top_pages": _items(pages, "unifiedScreenName"),
         "top_countries": _items(countries, "country"),
         "by_device": _items(devices, "deviceCategory"),
     }
+    now = time.monotonic()
+    _realtime_cache = (result, now + cache_ttl, now + stale_ttl)
+    return result
 
 
 def get_audience(days: int = 30) -> Dict:

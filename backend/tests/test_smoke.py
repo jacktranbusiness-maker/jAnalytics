@@ -111,6 +111,31 @@ def test_realtime():
           rt["top_pages"][0]["label"])
 
 
+def test_realtime_cache():
+    print("realtime cache")
+    from app.mock_data import MockGAClient
+
+    class CountingClient(MockGAClient):
+        def __init__(self):
+            super().__init__()
+            self.calls = 0
+
+        def run_realtime_report(self, *args, **kwargs):
+            self.calls += 1
+            return super().run_realtime_report(*args, **kwargs)
+
+    client = CountingClient()
+    previous_cache = ga_service._realtime_cache
+    try:
+        ga_service._realtime_cache = (None, 0.0, 0.0)
+        first = ga_service._fetch_realtime(client, cache_ttl=60, stale_ttl=3600)
+        second = ga_service.get_realtime()
+        _check("cached response reused", first is second)
+        _check("one report set only", client.calls == 5)
+    finally:
+        ga_service._realtime_cache = previous_cache
+
+
 def test_audience():
     print("get_audience(days=30)")
     a = ga_service.get_audience(days=30)
@@ -137,6 +162,7 @@ def main():
         test_devices,
         test_report,
         test_realtime,
+        test_realtime_cache,
         test_audience,
     ]
     failures = 0

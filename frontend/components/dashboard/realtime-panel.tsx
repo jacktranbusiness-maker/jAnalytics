@@ -44,60 +44,62 @@ export function RealtimePanel({ data }: { data: RealtimeResponse }) {
           </span>
           <span className="text-sm font-semibold">Realtime</span>
         </div>
-        <span className="text-xs text-muted-foreground">last 30 min</span>
+        <span className="text-xs text-muted-foreground">last 30 min · refreshes every minute</span>
       </CardHeader>
 
-      <CardContent className="space-y-5">
-        {/* Big live number */}
-        <div>
-          <div className="flex items-end gap-2">
-            <AnimatePresence mode="popLayout">
-              <motion.span
-                key={data.active_users}
-                initial={{ y: 8, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: -8, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 320, damping: 24 }}
-                className="text-4xl font-bold leading-none tracking-tight"
-              >
-                {formatInteger(data.active_users)}
-              </motion.span>
-            </AnimatePresence>
+      <CardContent className="space-y-5 xl:grid xl:grid-cols-[minmax(170px,0.75fr)_minmax(320px,1.25fr)] xl:gap-6 xl:space-y-0">
+        <div className="space-y-5">
+          {/* Big live number */}
+          <div>
+            <div className="flex items-end gap-2">
+              <AnimatePresence mode="popLayout">
+                <motion.span
+                  key={data.active_users}
+                  initial={{ y: 8, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: -8, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 320, damping: 24 }}
+                  className="text-4xl font-bold leading-none tracking-tight"
+                >
+                  {formatInteger(data.active_users)}
+                </motion.span>
+              </AnimatePresence>
+            </div>
+            <p className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
+              active users right now
+            </p>
           </div>
-          <p className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
-            active users right now
-          </p>
-        </div>
 
-        {/* Per-minute sparkline */}
-        <div>
-          <div className="flex h-16 items-end gap-[3px]">
-            {data.per_minute.map((p, i) => {
-              const isNow = i >= data.per_minute.length - 1;
-              return (
-                <motion.div
-                  key={p.minutes_ago}
-                  className={cn(
-                    "flex-1 rounded-sm",
-                    isNow ? "bg-success" : "bg-success/50",
-                  )}
-                  initial={{ height: 0 }}
-                  animate={{
-                    height: `${Math.max((p.active_users / maxMinute) * 100, 4)}%`,
-                  }}
-                  transition={{
-                    delay: i * 0.008,
-                    type: "spring",
-                    stiffness: 200,
-                    damping: 22,
-                  }}
-                />
-              );
-            })}
-          </div>
-          <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-            <span>30 min ago</span>
-            <span>now</span>
+          {/* Per-minute sparkline */}
+          <div>
+            <div className="flex h-16 items-end gap-[3px]">
+              {data.per_minute.map((p, i) => {
+                const isNow = i >= data.per_minute.length - 1;
+                return (
+                  <motion.div
+                    key={p.minutes_ago}
+                    className={cn(
+                      "flex-1 rounded-sm",
+                      isNow ? "bg-success" : "bg-success/50",
+                    )}
+                    initial={{ height: 0 }}
+                    animate={{
+                      height: `${Math.max((p.active_users / maxMinute) * 100, 4)}%`,
+                    }}
+                    transition={{
+                      delay: i * 0.008,
+                      type: "spring",
+                      stiffness: 200,
+                      damping: 22,
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+              <span>30 min ago</span>
+              <span>now</span>
+            </div>
           </div>
         </div>
 
@@ -136,18 +138,32 @@ export function RealtimePanel({ data }: { data: RealtimeResponse }) {
             })}
           </div>
 
-          <ul className="space-y-1.5">
+          <ul className="space-y-1">
             {items.length === 0 && (
               <li className="py-2 text-xs text-muted-foreground">
                 No active users.
               </li>
             )}
             {items.map((item) => (
-              <li key={item.label} className="flex items-center gap-3 text-sm">
-                <span className="w-28 shrink-0 truncate capitalize">
-                  {item.label || "(not set)"}
-                </span>
-                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+              <li
+                key={item.label}
+                className="rounded-lg border border-transparent px-2 py-1.5 transition-colors hover:border-border hover:bg-muted/40"
+              >
+                <div className="flex items-start gap-3 text-sm">
+                  <span
+                    title={item.label || "(not set)"}
+                    className={cn(
+                      "min-w-0 flex-1 font-medium leading-snug",
+                      tab !== "pages" && "capitalize",
+                    )}
+                  >
+                    {item.label || "(not set)"}
+                  </span>
+                  <span className="shrink-0 tabular-nums font-medium">
+                    {item.active_users}
+                  </span>
+                </div>
+                <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-muted">
                   <motion.span
                     className="block h-full rounded-full bg-primary"
                     initial={{ width: 0 }}
@@ -156,9 +172,6 @@ export function RealtimePanel({ data }: { data: RealtimeResponse }) {
                     }}
                     transition={{ type: "spring", stiffness: 160, damping: 22 }}
                   />
-                </span>
-                <span className="w-8 shrink-0 text-right tabular-nums font-medium">
-                  {item.active_users}
                 </span>
               </li>
             ))}

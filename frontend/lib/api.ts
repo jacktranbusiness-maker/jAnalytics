@@ -13,10 +13,23 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ||
   "http://localhost:8000";
 
-async function getJSON<T>(path: string): Promise<T> {
+export class ApiError extends Error {
+  status: number;
+  retryAfterMs?: number;
+
+  constructor(message: string, status: number, retryAfterMs?: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+async function getJSON<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { Accept: "application/json" },
     cache: "no-store",
+    ...init,
   });
   if (!res.ok) {
     let detail = `Request failed (${res.status})`;
@@ -26,7 +39,14 @@ async function getJSON<T>(path: string): Promise<T> {
     } catch {
       /* ignore parse errors */
     }
-    throw new Error(detail);
+    const retryAfter = Number(res.headers.get("retry-after"));
+    throw new ApiError(
+      detail,
+      res.status,
+      Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter * 1000
+        : undefined,
+    );
   }
   return (await res.json()) as T;
 }
@@ -39,7 +59,8 @@ export const api = {
   overview: (days: number, compare = true) =>
     getJSON<OverviewResponse>(`/api/overview?days=${days}&compare=${compare}`),
 
-  realtime: () => getJSON<RealtimeResponse>("/api/realtime"),
+  realtime: () =>
+    getJSON<RealtimeResponse>("/api/realtime", { cache: "default" }),
 
   audience: (days: number) =>
     getJSON<AudienceResponse>(`/api/audience?days=${days}`),

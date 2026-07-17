@@ -40,6 +40,13 @@ def _as_bool(value: str, default: bool = False) -> bool:
     return value.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _as_int(value: str, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 class Settings:
     """Runtime settings resolved from environment variables."""
 
@@ -64,6 +71,17 @@ class Settings:
 
         # Human-friendly label shown in the UI header.
         self.site_name: str = os.environ.get("SITE_NAME", "My Website")
+
+        # One dashboard refresh runs several GA4 realtime reports, so cache a
+        # shared snapshot and retain it while a temporary quota window clears.
+        self.realtime_cache_ttl_seconds: int = max(
+            15,
+            _as_int(os.environ.get("REALTIME_CACHE_TTL_SECONDS"), 60),
+        )
+        self.realtime_stale_ttl_seconds: int = max(
+            self.realtime_cache_ttl_seconds,
+            _as_int(os.environ.get("REALTIME_STALE_TTL_SECONDS"), 3600),
+        )
 
         # CORS: comma-separated list of allowed origins for the frontend.
         origins = os.environ.get(
@@ -95,6 +113,8 @@ class Settings:
             "credentials_configured": bool(
                 self.credentials_path or self.credentials_json
             ),
+            "realtime_cache_ttl_seconds": self.realtime_cache_ttl_seconds,
+            "realtime_stale_ttl_seconds": self.realtime_stale_ttl_seconds,
             "cors_origins": self.cors_origins,
             "cors_origin_regex": self.cors_origin_regex,
             "api_version": self.api_version,

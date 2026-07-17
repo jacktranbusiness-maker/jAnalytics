@@ -46,8 +46,8 @@ export default function OverviewPage() {
       description="Live activity, where your visitors come from, and who they are."
     >
       {/* HERO: Realtime + Audience */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <FadeIn>
+      <div className="grid gap-6 lg:grid-cols-5">
+        <FadeIn className="h-full lg:col-span-3">
           {realtime.isError ? (
             <ErrorState message={(realtime.error as Error).message} />
           ) : realtime.isLoading || !realtime.data ? (
@@ -57,7 +57,7 @@ export default function OverviewPage() {
           )}
         </FadeIn>
 
-        <FadeIn delay={0.05}>
+        <FadeIn className="h-full lg:col-span-2" delay={0.05}>
           {audience.isError ? (
             <ErrorState message={(audience.error as Error).message} />
           ) : audience.isLoading || !audience.data ? (

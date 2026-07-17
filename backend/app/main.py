@@ -9,12 +9,12 @@ Interactive docs at http://localhost:8000/docs
 
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import ga_service
 from .config import get_settings
-from .ga_service import GAServiceError
+from .ga_service import GAQuotaError, GAServiceError
 from .schemas import (
     AudienceResponse,
     ContentResponse,
@@ -47,6 +47,12 @@ def _handle(fn, *args, **kwargs):
     """Call a ga_service function and translate failures into HTTP errors."""
     try:
         return fn(*args, **kwargs)
+    except GAQuotaError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": "3600"},
+        )
     except GAServiceError as exc:
         # Client construction / credentials / property access failed.
         raise HTTPException(status_code=502, detail=str(exc))
@@ -70,8 +76,11 @@ def overview(
 
 
 @app.get("/api/realtime", response_model=RealtimeResponse, tags=["analytics"])
-def realtime():
-    """Active users in the last 30 minutes + live breakdowns (poll this)."""
+def realtime(response: Response):
+    """Active users in the last 30 minutes + live breakdowns."""
+    response.headers["Cache-Control"] = (
+        "public, max-age=30, s-maxage=60, stale-while-revalidate=300"
+    )
     return _handle(ga_service.get_realtime)
 
 

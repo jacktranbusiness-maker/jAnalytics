@@ -88,7 +88,7 @@ export function MultiSiteRealtime({ data }: { data: RealtimeSummaryResponse }) {
         ))}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(270px,.55fr)]">
+      <div className="space-y-4">
         <article className="min-w-0 overflow-hidden rounded-xl border border-[#dadce0] bg-white p-5">
           <header className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
             <div className="flex items-start gap-2.5">
@@ -122,7 +122,9 @@ export function MultiSiteRealtime({ data }: { data: RealtimeSummaryResponse }) {
           </div>
         </article>
 
-        <article className="flex min-h-[340px] flex-col rounded-xl border border-[#dadce0] bg-gradient-to-br from-white to-[#fffaf0] p-5">
+        <LiveBreakdown data={data} tab={tab} onTabChange={setTab} />
+
+        <article className="flex min-h-[220px] flex-col rounded-xl border border-[#dadce0] bg-gradient-to-br from-white to-[#fffaf0] p-5">
           <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#fef7e0] text-[#e37400]">
             <Sparkles className="h-5 w-5" />
           </span>
@@ -148,45 +150,57 @@ export function MultiSiteRealtime({ data }: { data: RealtimeSummaryResponse }) {
           </div>
         </article>
       </div>
-
-      <article className="overflow-hidden rounded-xl border border-[#dadce0] bg-white">
-        <header className="flex flex-col justify-between gap-4 border-b border-[#e8eaed] p-5 sm:flex-row sm:items-end">
-          <div>
-            <h2 className="text-sm font-semibold text-[#202124]">Live breakdown</h2>
-            <p className="mt-1 text-[11px] text-[#5f6368]">
-              Compare content, geography, and devices without switching properties.
-            </p>
-          </div>
-          <div className="flex rounded-lg bg-[#f1f3f4] p-1">
-            {TABS.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setTab(item.id)}
-                  className={cn(
-                    "inline-flex min-h-8 flex-1 items-center justify-center gap-1.5 rounded-md px-3 text-[10px] font-semibold text-[#5f6368] sm:flex-none",
-                    tab === item.id && "bg-white text-[#1a73e8] shadow-sm",
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />{item.label}
-                </button>
-              );
-            })}
-          </div>
-        </header>
-        <div className="grid lg:grid-cols-2">
-          {data.sites.map((result, index) => (
-            <BreakdownColumn
-              key={result.site.id}
-              result={result}
-              tab={tab}
-              divided={index > 0}
-            />
-          ))}
-        </div>
-      </article>
     </section>
+  );
+}
+
+function LiveBreakdown({
+  data,
+  tab,
+  onTabChange,
+}: {
+  data: RealtimeSummaryResponse;
+  tab: Tab;
+  onTabChange: (tab: Tab) => void;
+}) {
+  return (
+    <article className="overflow-hidden rounded-xl border border-[#dadce0] bg-white">
+      <header className="flex flex-col justify-between gap-4 border-b border-[#e8eaed] p-5 sm:flex-row sm:items-end">
+        <div>
+          <h2 className="text-sm font-semibold text-[#202124]">Live breakdown</h2>
+          <p className="mt-1 text-[11px] text-[#5f6368]">
+            Compare content, geography, and devices without switching properties.
+          </p>
+        </div>
+        <div className="flex rounded-lg bg-[#f1f3f4] p-1">
+          {TABS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onTabChange(item.id)}
+                className={cn(
+                  "inline-flex min-h-8 flex-1 items-center justify-center gap-1.5 rounded-md px-3 text-[10px] font-semibold text-[#5f6368] sm:flex-none",
+                  tab === item.id && "bg-white text-[#1a73e8] shadow-sm",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />{item.label}
+              </button>
+            );
+          })}
+        </div>
+      </header>
+      <div className="grid lg:grid-cols-2">
+        {data.sites.map((result, index) => (
+          <BreakdownColumn
+            key={result.site.id}
+            result={result}
+            tab={tab}
+            divided={index > 0}
+          />
+        ))}
+      </div>
+    </article>
   );
 }
 

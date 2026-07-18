@@ -13,8 +13,9 @@ Stdlib + skill_lib only -- importable and testable without fastapi/pydantic.
 """
 
 import time
+from datetime import datetime, timezone
 from threading import Lock
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .config import get_settings
 from .skill_lib import AnalyticsAnalyzer
@@ -40,7 +41,7 @@ class GAQuotaError(GAServiceError):
     """Raised when Google Analytics rejects a request because of quota."""
 
 
-_realtime_cache: Tuple[Optional[Dict], float, float] = (None, 0.0, 0.0)
+_realtime_cache: Dict[str, Tuple[Optional[Dict], float, float]] = {}
 _realtime_cache_lock = Lock()
 
 
@@ -54,23 +55,30 @@ def _is_quota_error(exc: Exception) -> bool:
     )
 
 
-def _build_client():
+def _build_client(site_id: Optional[str] = None):
     """Return a client instance appropriate for the current mode."""
     settings = get_settings()
+    site = settings.get_site(site_id)
     if settings.mock_mode:
         from .mock_data import MockGAClient
 
-        return MockGAClient(property_id=settings.property_id or "mock-property")
+        return MockGAClient(property_id=site.property_id)
     # Real mode: skill's GoogleAnalyticsClient (validates env + credentials).
     from .skill_lib import GoogleAnalyticsClient
 
-    return GoogleAnalyticsClient()
+    return GoogleAnalyticsClient(
+        property_id=site.property_id,
+        credentials_json=settings.credentials_json,
+        credentials_path=settings.credentials_path,
+    )
 
 
-def get_analyzer() -> AnalyticsAnalyzer:
+def get_analyzer(site_id: Optional[str] = None) -> AnalyticsAnalyzer:
     """Create an analyzer wired to the active client (mock or real)."""
     try:
-        return AnalyticsAnalyzer(client=_build_client())
+        return AnalyticsAnalyzer(client=_build_client(site_id))
+    except KeyError:
+        raise
     except Exception as exc:  # surface a clean error to the API layer
         raise GAServiceError(str(exc))
 
@@ -80,9 +88,11 @@ def get_analyzer() -> AnalyticsAnalyzer:
 # --------------------------------------------------------------------------- #
 
 
-def get_overview(days: int = 30, compare: bool = True) -> Dict:
+def get_overview(
+    days: int = 30, compare: bool = True, site_id: Optional[str] = None
+) -> Dict:
     """Headline KPIs for the overview cards, with optional period comparison."""
-    analyzer = get_analyzer()
+    analyzer = get_analyzer(site_id)
     if compare:
         comparison = analyzer.compare_periods(
             current_days=days, metrics=OVERVIEW_METRICS
@@ -115,12 +125,14 @@ def get_overview(days: int = 30, compare: bool = True) -> Dict:
 
 
 def get_timeseries(
-    days: int = 30, metrics: Optional[List[str]] = None
+    days: int = 30,
+    metrics: Optional[List[str]] = None,
+    site_id: Optional[str] = None,
 ) -> Dict:
     """Daily series used by the trend chart."""
     if metrics is None:
         metrics = ["sessions", "activeUsers", "screenPageViews"]
-    analyzer = get_analyzer()
+    analyzer = get_analyzer(site_id)
     report = analyzer.client.run_report(
         start_date="{}daysAgo".format(days),
         end_date="yesterday",
@@ -154,27 +166,34 @@ def get_timeseries(
     }
 
 
-def get_traffic_sources(days: int = 30, limit: int = 20) -> Dict:
-    return get_analyzer().analyze_traffic_sources(days=days, limit=limit)
+def get_traffic_sources(
+    days: int = 30, limit: int = 20, site_id: Optional[str] = None
+) -> Dict:
+    return get_analyzer(site_id).analyze_traffic_sources(days=days, limit=limit)
 
 
-def get_content_performance(days: int = 30, limit: int = 50) -> Dict:
-    return get_analyzer().analyze_content_performance(days=days, limit=limit)
+def get_content_performance(
+    days: int = 30, limit: int = 50, site_id: Optional[str] = None
+) -> Dict:
+    return get_analyzer(site_id).analyze_content_performance(days=days, limit=limit)
 
 
-def get_device_performance(days: int = 30) -> Dict:
-    return get_analyzer().analyze_device_performance(days=days)
+def get_device_performance(days: int = 30, site_id: Optional[str] = None) -> Dict:
+    return get_analyzer(site_id).analyze_device_performance(days=days)
 
 
-def get_realtime() -> Dict:
+def get_realtime(site_id: Optional[str] = None) -> Dict:
     """Active users in the last 30 minutes, with live breakdowns.
 
     Mirrors how the real Realtime API is queried: one call per breakdown.
     """
-    global _realtime_cache
     settings = get_settings()
+    site = settings.get_site(site_id)
+    cache_key = site.id
     now = time.monotonic()
-    cached, expires_at, stale_until = _realtime_cache
+    cached, expires_at, stale_until = _realtime_cache.get(
+        cache_key, (None, 0.0, 0.0)
+    )
 
     if cached is not None and now < expires_at:
         return cached
@@ -182,14 +201,17 @@ def get_realtime() -> Dict:
     # Prevent simultaneous browser tabs from fanning out into multiple sets of
     # GA4 requests on the same backend instance.
     with _realtime_cache_lock:
-        cached, expires_at, stale_until = _realtime_cache
+        cached, expires_at, stale_until = _realtime_cache.get(
+            cache_key, (None, 0.0, 0.0)
+        )
         now = time.monotonic()
         if cached is not None and now < expires_at:
             return cached
 
         try:
             return _fetch_realtime(
-                get_analyzer().client,
+                get_analyzer(site.id).client,
+                site.id,
                 settings.realtime_cache_ttl_seconds,
                 settings.realtime_stale_ttl_seconds,
             )
@@ -197,16 +219,20 @@ def get_realtime() -> Dict:
             # During a temporary quota outage, stale realtime data is more
             # useful than replacing the whole panel with an error.
             if cached is not None and now < stale_until:
-                return cached
+                stale = dict(cached)
+                stale["status"] = "stale"
+                stale["is_stale"] = True
+                stale["stale_reason"] = str(exc)
+                return stale
             if _is_quota_error(exc):
                 raise GAQuotaError(str(exc)) from exc
             raise
 
 
-def _fetch_realtime(client, cache_ttl: int, stale_ttl: int) -> Dict:
+def _fetch_realtime(
+    client, site_id: str, cache_ttl: int, stale_ttl: int
+) -> Dict:
     """Fetch and cache one realtime snapshot."""
-    global _realtime_cache
-
     def _au(report: Dict) -> int:
         totals = report.get("totals") or []
         if totals:
@@ -262,6 +288,10 @@ def _fetch_realtime(client, cache_ttl: int, stale_ttl: int) -> Dict:
         ]
 
     result = {
+        "site_id": site_id,
+        "status": "live",
+        "is_stale": False,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
         "active_users": _au(total),
         "per_minute": per_minute,
         "top_pages": _items(pages, "unifiedScreenName"),
@@ -269,13 +299,51 @@ def _fetch_realtime(client, cache_ttl: int, stale_ttl: int) -> Dict:
         "by_device": _items(devices, "deviceCategory"),
     }
     now = time.monotonic()
-    _realtime_cache = (result, now + cache_ttl, now + stale_ttl)
+    _realtime_cache[site_id] = (result, now + cache_ttl, now + stale_ttl)
     return result
 
 
-def get_audience(days: int = 30) -> Dict:
+def get_realtime_summary() -> Dict[str, Any]:
+    """Return both websites while preserving per-site failure states."""
+    settings = get_settings()
+    sites = []
+    total_active_users = 0
+
+    for site in settings.sites:
+        try:
+            data = get_realtime(site.id)
+            total_active_users += int(data.get("active_users", 0))
+            sites.append(
+                {
+                    "site": site.public_dict(),
+                    "status": data.get("status", "live"),
+                    "updated_at": data.get("updated_at"),
+                    "data": data,
+                    "error": data.get("stale_reason"),
+                }
+            )
+        except Exception as exc:
+            sites.append(
+                {
+                    "site": site.public_dict(),
+                    "status": "error",
+                    "updated_at": None,
+                    "data": None,
+                    "error": str(exc),
+                }
+            )
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "refresh_after_seconds": settings.realtime_cache_ttl_seconds,
+        "total_active_users": total_active_users,
+        "sites": sites,
+    }
+
+
+def get_audience(days: int = 30, site_id: Optional[str] = None) -> Dict:
     """New vs returning split + top countries for the period."""
-    client = get_analyzer().client
+    client = get_analyzer(site_id).client
     start = "{}daysAgo".format(days)
 
     overall = client.run_report(
@@ -351,11 +419,12 @@ def run_custom_report(
     dimensions: Optional[List[str]] = None,
     limit: int = 10,
     order_by: Optional[str] = None,
+    site_id: Optional[str] = None,
 ) -> Dict:
     """Pass-through to the underlying ``run_report`` for ad-hoc queries."""
     if not metrics:
         metrics = ["sessions"]
-    analyzer = get_analyzer()
+    analyzer = get_analyzer(site_id)
     return analyzer.client.run_report(
         start_date="{}daysAgo".format(days),
         end_date="yesterday",
@@ -373,19 +442,33 @@ def health() -> Dict:
         "status": "ok",
         "mode": "mock" if settings.mock_mode else "real",
         "config": settings.describe(),
+        "sites": [],
     }
-    try:
-        # A cheap call validates client construction (and, in real mode,
-        # credentials + property access).
-        get_analyzer().client.run_report(
-            start_date="7daysAgo",
-            end_date="yesterday",
-            metrics=["sessions"],
-            limit=1,
-        )
-        status["analytics_reachable"] = True
-    except Exception as exc:
+    for site in settings.sites:
+        site_status = {"id": site.id, "name": site.name, "reachable": False}
+        try:
+            # A cheap call validates client construction (and, in real mode,
+            # credentials + property access) for this specific property.
+            get_analyzer(site.id).client.run_report(
+                start_date="7daysAgo",
+                end_date="yesterday",
+                metrics=["sessions"],
+                limit=1,
+            )
+            site_status["reachable"] = True
+        except Exception as exc:
+            site_status["error"] = str(exc)
+        status["sites"].append(site_status)
+
+    status["analytics_reachable"] = bool(status["sites"]) and all(
+        item["reachable"] for item in status["sites"]
+    )
+    if not status["analytics_reachable"]:
         status["status"] = "degraded"
-        status["analytics_reachable"] = False
-        status["error"] = str(exc)
+        failed = [item for item in status["sites"] if not item["reachable"]]
+        if failed:
+            status["error"] = "; ".join(
+                "{}: {}".format(item["name"], item.get("error", "unreachable"))
+                for item in failed
+            )
     return status

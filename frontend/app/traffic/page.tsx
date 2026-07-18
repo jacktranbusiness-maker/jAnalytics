@@ -7,10 +7,16 @@ import { BlockSkeleton, ErrorState } from "@/components/dashboard/states";
 import { FadeIn } from "@/components/motion/motion-primitives";
 import { useTrafficSources } from "@/lib/hooks";
 import { useRange } from "@/lib/range-context";
+import { useSite } from "@/lib/site-context";
 
 export default function TrafficPage() {
   const { days } = useRange();
-  const { data, isLoading, isError, error } = useTrafficSources(days);
+  const { siteId } = useSite();
+  const { data, isLoading, isError, error } = useTrafficSources(
+    days,
+    20,
+    siteId,
+  );
 
   return (
     <PageShell

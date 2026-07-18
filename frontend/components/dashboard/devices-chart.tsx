@@ -18,8 +18,8 @@ import type { DeviceRow } from "@/lib/types";
 
 const DEVICE_COLORS: Record<string, string> = {
   desktop: "hsl(var(--primary))",
-  mobile: "hsl(243 75% 72%)",
-  tablet: "hsl(243 40% 80%)",
+  mobile: "#8ab4f8",
+  tablet: "#f9ab00",
 };
 
 const DEVICE_ICON: Record<

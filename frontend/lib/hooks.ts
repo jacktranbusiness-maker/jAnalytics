@@ -13,18 +13,26 @@ export function useHealth() {
   });
 }
 
-export function useOverview(days: number, compare = true) {
+export function useSites() {
   return useQuery({
-    queryKey: ["overview", days, compare],
-    queryFn: () => api.overview(days, compare),
+    queryKey: ["sites"],
+    queryFn: api.sites,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useOverview(days: number, compare = true, siteId?: string) {
+  return useQuery({
+    queryKey: ["overview", siteId ?? "default", days, compare],
+    queryFn: () => api.overview(days, compare, siteId),
     staleTime: STALE,
   });
 }
 
-export function useRealtime() {
+export function useRealtime(siteId?: string) {
   return useQuery({
-    queryKey: ["realtime"],
-    queryFn: api.realtime,
+    queryKey: ["realtime", siteId ?? "default"],
+    queryFn: () => api.realtime(siteId),
     // One refresh fans out into several GA4 reports. A minute is still live
     // enough for a dashboard while cutting request volume by 6x.
     staleTime: 45_000,
@@ -48,42 +56,62 @@ export function useRealtime() {
   });
 }
 
-export function useAudience(days: number) {
+export function useRealtimeSummary() {
   return useQuery({
-    queryKey: ["audience", days],
-    queryFn: () => api.audience(days),
+    queryKey: ["realtime-summary"],
+    queryFn: api.realtimeSummary,
+    staleTime: 45_000,
+    retry: false,
+    refetchInterval: (query) => {
+      const error = query.state.error;
+      if (error instanceof ApiError && error.status === 429) {
+        return error.retryAfterMs ?? 60 * 60 * 1000;
+      }
+      if (error) return 5 * 60 * 1000;
+      return 60 * 1000;
+    },
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+}
+
+export function useAudience(days: number, siteId?: string) {
+  return useQuery({
+    queryKey: ["audience", siteId ?? "default", days],
+    queryFn: () => api.audience(days, siteId),
     staleTime: STALE,
   });
 }
 
-export function useTimeseries(days: number, metrics?: string[]) {
+export function useTimeseries(days: number, metrics?: string[], siteId?: string) {
   return useQuery({
-    queryKey: ["timeseries", days, metrics],
-    queryFn: () => api.timeseries(days, metrics),
+    queryKey: ["timeseries", siteId ?? "default", days, metrics],
+    queryFn: () => api.timeseries(days, metrics, siteId),
     staleTime: STALE,
   });
 }
 
-export function useTrafficSources(days: number, limit = 20) {
+export function useTrafficSources(days: number, limit = 20, siteId?: string) {
   return useQuery({
-    queryKey: ["traffic-sources", days, limit],
-    queryFn: () => api.trafficSources(days, limit),
+    queryKey: ["traffic-sources", siteId ?? "default", days, limit],
+    queryFn: () => api.trafficSources(days, limit, siteId),
     staleTime: STALE,
   });
 }
 
-export function useContent(days: number, limit = 50) {
+export function useContent(days: number, limit = 50, siteId?: string) {
   return useQuery({
-    queryKey: ["content", days, limit],
-    queryFn: () => api.content(days, limit),
+    queryKey: ["content", siteId ?? "default", days, limit],
+    queryFn: () => api.content(days, limit, siteId),
     staleTime: STALE,
   });
 }
 
-export function useDevices(days: number) {
+export function useDevices(days: number, siteId?: string) {
   return useQuery({
-    queryKey: ["devices", days],
-    queryFn: () => api.devices(days),
+    queryKey: ["devices", siteId ?? "default", days],
+    queryFn: () => api.devices(days, siteId),
     staleTime: STALE,
   });
 }

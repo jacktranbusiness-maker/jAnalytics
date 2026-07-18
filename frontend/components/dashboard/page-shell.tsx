@@ -15,10 +15,10 @@ export function PageShell({
   return (
     <>
       <Topbar title={title} />
-      <div className="flex-1 space-y-6 p-4 md:p-8">
+      <div className="mx-auto w-full max-w-[1580px] flex-1 space-y-6 px-3 pb-28 pt-5 sm:px-5 md:pb-10 lg:px-8">
         {description && (
           <FadeIn>
-            <p className="text-sm text-muted-foreground">{description}</p>
+            <p className="text-xs leading-5 text-[#5f6368]">{description}</p>
           </FadeIn>
         )}
         {children}

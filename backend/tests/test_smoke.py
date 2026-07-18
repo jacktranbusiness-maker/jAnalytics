@@ -30,6 +30,12 @@ def test_health():
     _check("status ok", h["status"] == "ok")
     _check("mode is mock", h["mode"] == "mock")
     _check("analytics reachable", h["analytics_reachable"] is True)
+    _check("two websites configured", len(h["sites"]) == 2)
+    _check("every website reachable", all(s["reachable"] for s in h["sites"]))
+    _check(
+        "public site metadata omits property id",
+        all("property_id" not in site for site in h["config"]["sites"]),
+    )
 
 
 def test_overview():
@@ -46,6 +52,23 @@ def test_overview():
     print("get_overview(compare=False)")
     o2 = ga_service.get_overview(days=7, compare=False)
     _check("no previous period", o2["previous_period"] is None)
+
+
+def test_site_isolation():
+    print("site isolation")
+    northstar = ga_service.get_overview(days=30, site_id="northstar")
+    signal = ga_service.get_overview(days=30, site_id="signal")
+    _check(
+        "properties produce distinct metrics",
+        northstar["metrics"]["sessions"]["current"]
+        != signal["metrics"]["sessions"]["current"],
+    )
+    try:
+        ga_service.get_overview(site_id="missing")
+    except KeyError:
+        _check("unknown website rejected", True)
+    else:
+        _check("unknown website rejected", False)
 
 
 def test_timeseries():
@@ -99,8 +122,10 @@ def test_report():
 
 
 def test_realtime():
-    print("get_realtime()")
-    rt = ga_service.get_realtime()
+    print("get_realtime(site_id=northstar)")
+    rt = ga_service.get_realtime(site_id="northstar")
+    _check("site id present", rt["site_id"] == "northstar")
+    _check("live status present", rt["status"] == "live")
     _check("active_users present", isinstance(rt["active_users"], int))
     _check("30 minute points", len(rt["per_minute"]) == 30)
     _check("minutes oldest-first", rt["per_minute"][0]["minutes_ago"] == 29)
@@ -125,15 +150,55 @@ def test_realtime_cache():
             return super().run_realtime_report(*args, **kwargs)
 
     client = CountingClient()
-    previous_cache = ga_service._realtime_cache
+    previous_cache = dict(ga_service._realtime_cache)
     try:
-        ga_service._realtime_cache = (None, 0.0, 0.0)
-        first = ga_service._fetch_realtime(client, cache_ttl=60, stale_ttl=3600)
-        second = ga_service.get_realtime()
+        ga_service._realtime_cache.clear()
+        first = ga_service._fetch_realtime(
+            client,
+            site_id="northstar",
+            cache_ttl=60,
+            stale_ttl=3600,
+        )
+        second = ga_service.get_realtime(site_id="northstar")
         _check("cached response reused", first is second)
         _check("one report set only", client.calls == 5)
     finally:
-        ga_service._realtime_cache = previous_cache
+        ga_service._realtime_cache.clear()
+        ga_service._realtime_cache.update(previous_cache)
+
+
+def test_realtime_summary():
+    print("get_realtime_summary()")
+    ga_service._realtime_cache.clear()
+    summary = ga_service.get_realtime_summary()
+    _check("two website snapshots", len(summary["sites"]) == 2)
+    _check("all snapshots live", all(s["status"] == "live" for s in summary["sites"]))
+    expected_total = sum(s["data"]["active_users"] for s in summary["sites"])
+    _check("aggregate total matches", summary["total_active_users"] == expected_total)
+    _check(
+        "website snapshots differ",
+        summary["sites"][0]["data"]["active_users"]
+        != summary["sites"][1]["data"]["active_users"],
+    )
+
+
+def test_realtime_partial_failure():
+    print("realtime summary partial failure")
+    original = ga_service.get_realtime
+
+    def fake_get_realtime(site_id=None):
+        if site_id == "signal":
+            raise RuntimeError("simulated property outage")
+        return original(site_id=site_id)
+
+    try:
+        ga_service.get_realtime = fake_get_realtime
+        summary = ga_service.get_realtime_summary()
+        states = {item["site"]["id"]: item["status"] for item in summary["sites"]}
+        _check("healthy website stays live", states["northstar"] == "live")
+        _check("failed website is isolated", states["signal"] == "error")
+    finally:
+        ga_service.get_realtime = original
 
 
 def test_audience():
@@ -156,6 +221,7 @@ def main():
     tests = [
         test_health,
         test_overview,
+        test_site_isolation,
         test_timeseries,
         test_traffic_sources,
         test_content,
@@ -163,6 +229,8 @@ def main():
         test_report,
         test_realtime,
         test_realtime_cache,
+        test_realtime_summary,
+        test_realtime_partial_failure,
         test_audience,
     ]
     failures = 0

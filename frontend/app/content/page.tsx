@@ -20,10 +20,12 @@ import {
 import { formatInteger } from "@/lib/format";
 import { useContent } from "@/lib/hooks";
 import { useRange } from "@/lib/range-context";
+import { useSite } from "@/lib/site-context";
 
 export default function ContentPage() {
   const { days } = useRange();
-  const { data, isLoading, isError, error } = useContent(days);
+  const { siteId } = useSite();
+  const { data, isLoading, isError, error } = useContent(days, 50, siteId);
 
   return (
     <PageShell

@@ -17,8 +17,13 @@ from typing import List, Dict, Optional
 class GoogleAnalyticsClient:
     """Client for interacting with Google Analytics 4 Data API."""
 
-    def __init__(self):
-        """Initialize the client with credentials from environment."""
+    def __init__(
+        self,
+        property_id: Optional[str] = None,
+        credentials_json: Optional[str] = None,
+        credentials_path: Optional[str] = None,
+    ):
+        """Initialize a property-scoped client with shared credentials."""
         import os
 
         # Lazy imports: only required when actually talking to GA4.
@@ -38,7 +43,7 @@ class GoogleAnalyticsClient:
             # dotenv is optional; environment variables can be set directly.
             pass
 
-        self.property_id = os.environ.get("GOOGLE_ANALYTICS_PROPERTY_ID")
+        self.property_id = property_id or os.environ.get("GOOGLE_ANALYTICS_PROPERTY_ID")
         if not self.property_id:
             raise ValueError(
                 "GOOGLE_ANALYTICS_PROPERTY_ID environment variable not set. "
@@ -50,8 +55,12 @@ class GoogleAnalyticsClient:
         #     inline JSON (or base64-encoded JSON). Ideal for serverless hosts
         #     like Vercel where you cannot ship a key file.
         #  2. GOOGLE_APPLICATION_CREDENTIALS -- path to the key file (ADC).
-        credentials_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-        credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        credentials_json = credentials_json or os.environ.get(
+            "GOOGLE_APPLICATION_CREDENTIALS_JSON"
+        )
+        credentials_path = credentials_path or os.environ.get(
+            "GOOGLE_APPLICATION_CREDENTIALS"
+        )
 
         client_kwargs = {}
         if credentials_json:

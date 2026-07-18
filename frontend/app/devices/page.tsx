@@ -7,10 +7,12 @@ import { BlockSkeleton, ErrorState } from "@/components/dashboard/states";
 import { FadeIn } from "@/components/motion/motion-primitives";
 import { useDevices } from "@/lib/hooks";
 import { useRange } from "@/lib/range-context";
+import { useSite } from "@/lib/site-context";
 
 export default function DevicesPage() {
   const { days } = useRange();
-  const { data, isLoading, isError, error } = useDevices(days);
+  const { siteId } = useSite();
+  const { data, isLoading, isError, error } = useDevices(days, siteId);
 
   return (
     <PageShell

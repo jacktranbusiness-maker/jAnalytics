@@ -4,6 +4,7 @@ import * as React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { RangeProvider } from "@/lib/range-context";
+import { SiteProvider } from "@/lib/site-context";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [client] = React.useState(
@@ -20,7 +21,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={client}>
-      <RangeProvider>{children}</RangeProvider>
+      <SiteProvider>
+        <RangeProvider>{children}</RangeProvider>
+      </SiteProvider>
     </QueryClientProvider>
   );
 }

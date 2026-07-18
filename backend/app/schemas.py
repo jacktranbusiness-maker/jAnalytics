@@ -93,6 +93,19 @@ class HealthResponse(BaseModel):
     config: Dict[str, Any]
     analytics_reachable: Optional[bool] = None
     error: Optional[str] = None
+    sites: List[Dict[str, Any]] = []
+
+
+class SiteSummary(BaseModel):
+    id: str
+    name: str
+    domain: str
+    color: str
+    property_id_configured: bool
+
+
+class SitesResponse(BaseModel):
+    sites: List[SiteSummary]
 
 
 class RealtimeMinutePoint(BaseModel):
@@ -106,11 +119,31 @@ class RealtimeItem(BaseModel):
 
 
 class RealtimeResponse(BaseModel):
+    site_id: str
+    status: str
+    is_stale: bool = False
+    updated_at: str
+    stale_reason: Optional[str] = None
     active_users: int
     per_minute: List[RealtimeMinutePoint]
     top_pages: List[RealtimeItem]
     top_countries: List[RealtimeItem]
     by_device: List[RealtimeItem]
+
+
+class RealtimeSiteResult(BaseModel):
+    site: SiteSummary
+    status: str
+    updated_at: Optional[str] = None
+    data: Optional[RealtimeResponse] = None
+    error: Optional[str] = None
+
+
+class RealtimeSummaryResponse(BaseModel):
+    generated_at: str
+    refresh_after_seconds: int
+    total_active_users: int
+    sites: List[RealtimeSiteResult]
 
 
 class AudienceSegment(BaseModel):

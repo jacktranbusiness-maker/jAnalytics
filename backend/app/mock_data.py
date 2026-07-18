@@ -172,6 +172,18 @@ class MockGAClient:
 
     def __init__(self, property_id: str = "mock-property"):
         self.property_id = property_id
+        self.site_factor = _jitter("property:" + property_id, 0.22)
+        self.site_seed = int(hashlib.md5(property_id.encode("utf-8")).hexdigest()[:8], 16)
+
+    def _site_value(self, metric: str, value: float) -> float:
+        if metric in _RATE_METRICS:
+            return value * (1.0 + (self.site_factor - 1.0) * 0.25)
+        if metric == "averageSessionDuration":
+            return value * (1.0 + (self.site_factor - 1.0) * 0.45)
+        return value * self.site_factor
+
+    def _aggregate_value(self, metric: str, start_date: Optional[str]) -> float:
+        return self._site_value(metric, _aggregate_value(metric, start_date))
 
     # Public API mirrors the real client. ---------------------------------
     def run_report(
@@ -220,8 +232,13 @@ class MockGAClient:
         dims = dimensions or []
         window = int(time.time() // 5)
         # "Active users right now" -- shared across calls in the same window.
-        active_now = 38 + random.Random(window).randint(-8, 22)
-        rnd = random.Random(window + (abs(hash(tuple(dims))) % 1000))
+        active_now = int(
+            (38 + random.Random(window + self.site_seed).randint(-8, 22))
+            * self.site_factor
+        )
+        rnd = random.Random(
+            window + self.site_seed + (abs(hash(tuple(dims))) % 1000)
+        )
 
         if not dims:
             row = {"dimensions": {}, "metrics": {m: str(active_now) for m in metrics}}
@@ -289,7 +306,7 @@ class MockGAClient:
         }
 
     def _aggregate_report(self, metrics: List[str], start_date: str) -> Dict:
-        values = [_aggregate_value(m, start_date) for m in metrics]
+        values = [self._aggregate_value(m, start_date) for m in metrics]
         totals = [{"value": _format_value(m, v)} for m, v in zip(metrics, values)]
         row = {
             "dimensions": {},
@@ -317,7 +334,7 @@ class MockGAClient:
             trend = 1.0 + 0.006 * i  # mild upward trend across the window
             row_metrics = {}
             for m in metrics:
-                base = _BASE.get(m, 100.0)
+                base = self._site_value(m, _BASE.get(m, 100.0))
                 if m in _RATE_METRICS:
                     # rates fluctuate around the baseline, not summed
                     val = base * _jitter(m + day_key, 0.06)
@@ -334,7 +351,9 @@ class MockGAClient:
         totals = []
         for m in metrics:
             if m in _RATE_METRICS or m == "averageSessionDuration":
-                totals.append({"value": _format_value(m, _BASE.get(m, 100.0))})
+                totals.append(
+                    {"value": _format_value(m, self._site_value(m, _BASE.get(m, 100.0)))}
+                )
             else:
                 totals.append({"value": _format_value(m, totals_accum[m])})
         result.update(
@@ -367,7 +386,9 @@ class MockGAClient:
             metric_values = {}
             for m in metrics:
                 raw = record.get(m, 0)
-                metric_values[m] = _format_value(m, float(raw))
+                metric_values[m] = _format_value(
+                    m, self._site_value(m, float(raw))
+                )
             rows.append({"dimensions": dim_values, "metrics": metric_values})
 
         # Respect ordering by sessions/views desc (fixtures are pre-sorted),
@@ -379,11 +400,17 @@ class MockGAClient:
         totals = []
         for m in metrics:
             if m in _RATE_METRICS or m == "averageSessionDuration":
-                vals = [float(dict(zip(mapping, e)).get(m, 0)) for e in fixture]
+                vals = [
+                    self._site_value(m, float(dict(zip(mapping, e)).get(m, 0)))
+                    for e in fixture
+                ]
                 avg = sum(vals) / len(vals) if vals else 0.0
                 totals.append({"value": _format_value(m, avg)})
             else:
-                s = sum(float(dict(zip(mapping, e)).get(m, 0)) for e in fixture)
+                s = sum(
+                    self._site_value(m, float(dict(zip(mapping, e)).get(m, 0)))
+                    for e in fixture
+                )
                 totals.append({"value": _format_value(m, s)})
         result.update(
             {
@@ -406,7 +433,7 @@ class MockGAClient:
             }
             metric_values = {}
             for m in metrics:
-                base = _aggregate_value(m, start_date) / float(count)
+                base = self._aggregate_value(m, start_date) / float(count)
                 metric_values[m] = _format_value(
                     m, base * _jitter(m + str(idx), 0.2)
                 )
@@ -440,15 +467,19 @@ class MockGAClient:
             for m in metrics:
                 if m in _RATE_METRICS:
                     metric_values[m] = _format_value(
-                        m, _BASE.get(m, 0.5) * _jitter(m + label, 0.08)
+                        m,
+                        self._site_value(m, _BASE.get(m, 0.5))
+                        * _jitter(m + label + self.property_id, 0.08),
                     )
                 elif m == "averageSessionDuration":
                     metric_values[m] = _format_value(
-                        m, _BASE.get(m, 120.0) * _jitter(m + label, 0.1)
+                        m,
+                        self._site_value(m, _BASE.get(m, 120.0))
+                        * _jitter(m + label + self.property_id, 0.1),
                     )
                 else:
                     metric_values[m] = _format_value(
-                        m, _aggregate_value(m, start_date) * share
+                        m, self._aggregate_value(m, start_date) * share
                     )
             rows.append({"dimensions": {dim_name: label}, "metrics": metric_values})
 
@@ -457,10 +488,12 @@ class MockGAClient:
         totals = []
         for m in metrics:
             if m in _RATE_METRICS or m == "averageSessionDuration":
-                totals.append({"value": _format_value(m, _BASE.get(m, 0.0))})
+                totals.append(
+                    {"value": _format_value(m, self._site_value(m, _BASE.get(m, 0.0)))}
+                )
             else:
                 totals.append(
-                    {"value": _format_value(m, _aggregate_value(m, start_date))}
+                    {"value": _format_value(m, self._aggregate_value(m, start_date))}
                 )
         result.update(
             {

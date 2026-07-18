@@ -22,6 +22,8 @@ from .schemas import (
     HealthResponse,
     OverviewResponse,
     RealtimeResponse,
+    RealtimeSummaryResponse,
+    SitesResponse,
     TimeseriesResponse,
     TrafficSourcesResponse,
 )
@@ -41,12 +43,15 @@ app.add_middleware(
 
 # Shared query params.
 DaysQuery = Query(30, ge=1, le=365, description="Look-back window in days")
+SiteQuery = Query(None, description="Website id from /api/sites; defaults to the first website")
 
 
 def _handle(fn, *args, **kwargs):
     """Call a ga_service function and translate failures into HTTP errors."""
     try:
         return fn(*args, **kwargs)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc).strip("'"))
     except GAQuotaError as exc:
         raise HTTPException(
             status_code=429,
@@ -66,28 +71,50 @@ def health():
     return ga_service.health()
 
 
+@app.get("/api/sites", response_model=SitesResponse, tags=["meta"])
+def sites():
+    """Safe website metadata for selectors; property ids stay server-side."""
+    return {"sites": settings.public_sites()}
+
+
 @app.get("/api/overview", response_model=OverviewResponse, tags=["analytics"])
 def overview(
     days: int = DaysQuery,
     compare: bool = Query(True, description="Compare with the previous period"),
+    site: Optional[str] = SiteQuery,
 ):
     """Headline KPIs with optional period-over-period comparison."""
-    return _handle(ga_service.get_overview, days=days, compare=compare)
+    return _handle(
+        ga_service.get_overview, days=days, compare=compare, site_id=site
+    )
 
 
 @app.get("/api/realtime", response_model=RealtimeResponse, tags=["analytics"])
-def realtime(response: Response):
+def realtime(response: Response, site: Optional[str] = SiteQuery):
     """Active users in the last 30 minutes + live breakdowns."""
     response.headers["Cache-Control"] = (
         "public, max-age=30, s-maxage=60, stale-while-revalidate=300"
     )
-    return _handle(ga_service.get_realtime)
+    return _handle(ga_service.get_realtime, site_id=site)
+
+
+@app.get(
+    "/api/realtime/summary",
+    response_model=RealtimeSummaryResponse,
+    tags=["analytics"],
+)
+def realtime_summary(response: Response):
+    """Synchronized realtime snapshots for every configured website."""
+    response.headers["Cache-Control"] = (
+        "public, max-age=30, s-maxage=60, stale-while-revalidate=300"
+    )
+    return ga_service.get_realtime_summary()
 
 
 @app.get("/api/audience", response_model=AudienceResponse, tags=["analytics"])
-def audience(days: int = DaysQuery):
+def audience(days: int = DaysQuery, site: Optional[str] = SiteQuery):
     """New vs returning users and top countries for the period."""
-    return _handle(ga_service.get_audience, days=days)
+    return _handle(ga_service.get_audience, days=days, site_id=site)
 
 
 @app.get("/api/timeseries", response_model=TimeseriesResponse, tags=["analytics"])
@@ -98,12 +125,18 @@ def timeseries(
         description="Comma-separated metrics (default: sessions,activeUsers,"
         "screenPageViews)",
     ),
+    site: Optional[str] = SiteQuery,
 ):
     """Daily series for the trend chart."""
     metric_list: Optional[List[str]] = (
         [m.strip() for m in metrics.split(",") if m.strip()] if metrics else None
     )
-    return _handle(ga_service.get_timeseries, days=days, metrics=metric_list)
+    return _handle(
+        ga_service.get_timeseries,
+        days=days,
+        metrics=metric_list,
+        site_id=site,
+    )
 
 
 @app.get(
@@ -111,21 +144,33 @@ def timeseries(
     response_model=TrafficSourcesResponse,
     tags=["analytics"],
 )
-def traffic_sources(days: int = DaysQuery, limit: int = Query(20, ge=1, le=100)):
+def traffic_sources(
+    days: int = DaysQuery,
+    limit: int = Query(20, ge=1, le=100),
+    site: Optional[str] = SiteQuery,
+):
     """Traffic source breakdown + optimization recommendations."""
-    return _handle(ga_service.get_traffic_sources, days=days, limit=limit)
+    return _handle(
+        ga_service.get_traffic_sources, days=days, limit=limit, site_id=site
+    )
 
 
 @app.get("/api/content", response_model=ContentResponse, tags=["analytics"])
-def content(days: int = DaysQuery, limit: int = Query(50, ge=1, le=200)):
+def content(
+    days: int = DaysQuery,
+    limit: int = Query(50, ge=1, le=200),
+    site: Optional[str] = SiteQuery,
+):
     """Page performance + high-bounce diagnostics."""
-    return _handle(ga_service.get_content_performance, days=days, limit=limit)
+    return _handle(
+        ga_service.get_content_performance, days=days, limit=limit, site_id=site
+    )
 
 
 @app.get("/api/devices", response_model=DevicesResponse, tags=["analytics"])
-def devices(days: int = DaysQuery):
+def devices(days: int = DaysQuery, site: Optional[str] = SiteQuery):
     """Device-category comparison + recommendations."""
-    return _handle(ga_service.get_device_performance, days=days)
+    return _handle(ga_service.get_device_performance, days=days, site_id=site)
 
 
 @app.get("/api/report", tags=["analytics"])
@@ -139,6 +184,7 @@ def report(
     order_by: Optional[str] = Query(
         None, description="Metric/dimension to sort by (prefix - desc, + asc)"
     ),
+    site: Optional[str] = SiteQuery,
 ):
     """Ad-hoc GA4 report (raw rows). Useful for custom widgets."""
     metric_list = [m.strip() for m in metrics.split(",") if m.strip()]
@@ -154,6 +200,7 @@ def report(
         dimensions=dim_list,
         limit=limit,
         order_by=order_by,
+        site_id=site,
     )
 
 

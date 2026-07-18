@@ -93,6 +93,24 @@ export interface HealthResponse {
   config: Record<string, unknown>;
   analytics_reachable?: boolean;
   error?: string;
+  sites: Array<{
+    id: string;
+    name: string;
+    reachable: boolean;
+    error?: string;
+  }>;
+}
+
+export interface SiteSummary {
+  id: string;
+  name: string;
+  domain: string;
+  color: string;
+  property_id_configured: boolean;
+}
+
+export interface SitesResponse {
+  sites: SiteSummary[];
 }
 
 export interface RealtimeMinutePoint {
@@ -106,11 +124,31 @@ export interface RealtimeItem {
 }
 
 export interface RealtimeResponse {
+  site_id: string;
+  status: "live" | "stale";
+  is_stale: boolean;
+  updated_at: string;
+  stale_reason?: string | null;
   active_users: number;
   per_minute: RealtimeMinutePoint[];
   top_pages: RealtimeItem[];
   top_countries: RealtimeItem[];
   by_device: RealtimeItem[];
+}
+
+export interface RealtimeSiteResult {
+  site: SiteSummary;
+  status: "live" | "stale" | "error";
+  updated_at: string | null;
+  data: RealtimeResponse | null;
+  error: string | null;
+}
+
+export interface RealtimeSummaryResponse {
+  generated_at: string;
+  refresh_after_seconds: number;
+  total_active_users: number;
+  sites: RealtimeSiteResult[];
 }
 
 export interface AudienceSegment {

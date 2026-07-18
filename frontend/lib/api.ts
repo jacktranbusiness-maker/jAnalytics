@@ -5,6 +5,8 @@ import type {
   HealthResponse,
   OverviewResponse,
   RealtimeResponse,
+  RealtimeSummaryResponse,
+  SitesResponse,
   TimeseriesResponse,
   TrafficSourcesResponse,
 } from "./types";
@@ -51,34 +53,54 @@ async function getJSON<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await res.json()) as T;
 }
 
+function withSite(path: string, siteId?: string) {
+  if (!siteId) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}site=${encodeURIComponent(siteId)}`;
+}
+
 export const api = {
   base: API_BASE,
 
   health: () => getJSON<HealthResponse>("/api/health"),
+  sites: () => getJSON<SitesResponse>("/api/sites"),
 
-  overview: (days: number, compare = true) =>
-    getJSON<OverviewResponse>(`/api/overview?days=${days}&compare=${compare}`),
+  overview: (days: number, compare = true, siteId?: string) =>
+    getJSON<OverviewResponse>(
+      withSite(`/api/overview?days=${days}&compare=${compare}`, siteId),
+    ),
 
-  realtime: () =>
-    getJSON<RealtimeResponse>("/api/realtime", { cache: "default" }),
+  realtime: (siteId?: string) =>
+    getJSON<RealtimeResponse>(withSite("/api/realtime", siteId), {
+      cache: "default",
+    }),
 
-  audience: (days: number) =>
-    getJSON<AudienceResponse>(`/api/audience?days=${days}`),
+  realtimeSummary: () =>
+    getJSON<RealtimeSummaryResponse>("/api/realtime/summary", {
+      cache: "default",
+    }),
 
-  timeseries: (days: number, metrics?: string[]) =>
+  audience: (days: number, siteId?: string) =>
+    getJSON<AudienceResponse>(withSite(`/api/audience?days=${days}`, siteId)),
+
+  timeseries: (days: number, metrics?: string[], siteId?: string) =>
     getJSON<TimeseriesResponse>(
-      `/api/timeseries?days=${days}` +
-        (metrics && metrics.length ? `&metrics=${metrics.join(",")}` : ""),
+      withSite(
+        `/api/timeseries?days=${days}` +
+          (metrics && metrics.length ? `&metrics=${metrics.join(",")}` : ""),
+        siteId,
+      ),
     ),
 
-  trafficSources: (days: number, limit = 20) =>
+  trafficSources: (days: number, limit = 20, siteId?: string) =>
     getJSON<TrafficSourcesResponse>(
-      `/api/traffic-sources?days=${days}&limit=${limit}`,
+      withSite(`/api/traffic-sources?days=${days}&limit=${limit}`, siteId),
     ),
 
-  content: (days: number, limit = 50) =>
-    getJSON<ContentResponse>(`/api/content?days=${days}&limit=${limit}`),
+  content: (days: number, limit = 50, siteId?: string) =>
+    getJSON<ContentResponse>(
+      withSite(`/api/content?days=${days}&limit=${limit}`, siteId),
+    ),
 
-  devices: (days: number) =>
-    getJSON<DevicesResponse>(`/api/devices?days=${days}`),
+  devices: (days: number, siteId?: string) =>
+    getJSON<DevicesResponse>(withSite(`/api/devices?days=${days}`, siteId)),
 };

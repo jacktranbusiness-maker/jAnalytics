@@ -7,7 +7,10 @@ variables, with optional loading from a local ``.env`` file.
 """
 
 import os
-from typing import List
+import json
+import re
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 
 def _load_dotenv(path: str = ".env") -> None:
@@ -47,6 +50,66 @@ def _as_int(value: str, default: int) -> int:
         return default
 
 
+_SITE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
+
+
+@dataclass(frozen=True)
+class SiteConfig:
+    id: str
+    name: str
+    domain: str
+    property_id: str
+    color: str = "#1a73e8"
+
+    @classmethod
+    def from_dict(cls, entry: Any, index: int) -> "SiteConfig":
+        if not isinstance(entry, dict):
+            raise ValueError("GA4_SITES_JSON entry {} must be an object".format(index + 1))
+
+        site_id = str(entry.get("id", "")).strip().lower()
+        name = str(entry.get("name", "")).strip()
+        domain = str(entry.get("domain", "")).strip()
+        property_id = str(entry.get("property_id", "")).strip()
+        color = str(entry.get("color", "#1a73e8")).strip() or "#1a73e8"
+
+        if not _SITE_ID_PATTERN.match(site_id):
+            raise ValueError(
+                "GA4_SITES_JSON entry {} has an invalid id; use lowercase letters, numbers, and hyphens".format(index + 1)
+            )
+        missing = [
+            key
+            for key, value in (
+                ("name", name),
+                ("domain", domain),
+                ("property_id", property_id),
+            )
+            if not value
+        ]
+        if missing:
+            raise ValueError(
+                "GA4_SITES_JSON entry {} is missing: {}".format(index + 1, ", ".join(missing))
+            )
+        if not re.match(r"^#[0-9a-fA-F]{6}$", color):
+            raise ValueError("GA4_SITES_JSON entry {} has an invalid color".format(index + 1))
+
+        return cls(
+            id=site_id,
+            name=name,
+            domain=domain,
+            property_id=property_id,
+            color=color.lower(),
+        )
+
+    def public_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "domain": self.domain,
+            "color": self.color,
+            "property_id_configured": bool(self.property_id),
+        }
+
+
 class Settings:
     """Runtime settings resolved from environment variables."""
 
@@ -59,7 +122,8 @@ class Settings:
             os.environ.get("MOCK_MODE"), default=True
         )
 
-        # The single GA4 property this dashboard reports on.
+        # Legacy single-property configuration is kept for backwards
+        # compatibility while GA4_SITES_JSON is rolled out.
         self.property_id: str = os.environ.get("GOOGLE_ANALYTICS_PROPERTY_ID", "")
         self.credentials_path: str = os.environ.get(
             "GOOGLE_APPLICATION_CREDENTIALS", ""
@@ -71,6 +135,7 @@ class Settings:
 
         # Human-friendly label shown in the UI header.
         self.site_name: str = os.environ.get("SITE_NAME", "My Website")
+        self.sites: List[SiteConfig] = self._load_sites()
 
         # One dashboard refresh runs several GA4 realtime reports, so cache a
         # shared snapshot and retain it while a temporary quota window clears.
@@ -97,12 +162,73 @@ class Settings:
             "CORS_ORIGIN_REGEX", r"https://.*\.vercel\.app"
         )
 
-        self.api_title: str = "GA4 Analytics Dashboard API"
-        self.api_version: str = "0.1.0"
+        self.api_title: str = "jAnalytics Multi-site GA4 API"
+        self.api_version: str = "0.2.0"
 
     @property
     def is_real_mode(self) -> bool:
         return not self.mock_mode
+
+    def _load_sites(self) -> List["SiteConfig"]:
+        raw = os.environ.get("GA4_SITES_JSON", "").strip()
+        if raw:
+            try:
+                entries = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise ValueError("GA4_SITES_JSON must be valid JSON: {}".format(exc))
+            if not isinstance(entries, list):
+                raise ValueError("GA4_SITES_JSON must contain a JSON array")
+            sites = [SiteConfig.from_dict(entry, index) for index, entry in enumerate(entries)]
+        elif self.property_id:
+            sites = [
+                SiteConfig(
+                    id="default",
+                    name=self.site_name,
+                    domain=os.environ.get("SITE_DOMAIN", "Configured property"),
+                    property_id=self.property_id,
+                )
+            ]
+        elif self.mock_mode:
+            sites = [
+                SiteConfig(
+                    id="northstar",
+                    name="Northstar Commerce",
+                    domain="northstar.store",
+                    property_id="mock-northstar",
+                    color="#1a73e8",
+                ),
+                SiteConfig(
+                    id="signal",
+                    name="The Signal Journal",
+                    domain="signaljournal.news",
+                    property_id="mock-signal",
+                    color="#34a853",
+                ),
+            ]
+        else:
+            sites = []
+
+        if not sites:
+            return []
+        if len(sites) > 2:
+            raise ValueError("GA4_SITES_JSON supports at most two websites")
+        ids = [site.id for site in sites]
+        if len(ids) != len(set(ids)):
+            raise ValueError("GA4_SITES_JSON site ids must be unique")
+        return sites
+
+    def get_site(self, site_id: Optional[str] = None) -> "SiteConfig":
+        if not self.sites:
+            raise ValueError("No GA4 websites are configured")
+        if site_id is None:
+            return self.sites[0]
+        for site in self.sites:
+            if site.id == site_id:
+                return site
+        raise KeyError("Unknown website: {}".format(site_id))
+
+    def public_sites(self) -> List[Dict[str, Any]]:
+        return [site.public_dict() for site in self.sites]
 
     def describe(self) -> dict:
         """Safe, non-sensitive view of the current configuration."""
@@ -110,6 +236,7 @@ class Settings:
             "mock_mode": self.mock_mode,
             "site_name": self.site_name,
             "property_id_configured": bool(self.property_id),
+            "sites": self.public_sites(),
             "credentials_configured": bool(
                 self.credentials_path or self.credentials_json
             ),

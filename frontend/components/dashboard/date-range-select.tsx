@@ -16,7 +16,7 @@ export function DateRangeSelect() {
 
   return (
     <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
-      <SelectTrigger className="w-[170px]">
+      <SelectTrigger className="h-10 w-[150px] shrink-0 rounded-lg border-[#dadce0] bg-white shadow-none sm:w-[170px]">
         <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
         <SelectValue />
       </SelectTrigger>

@@ -88,7 +88,9 @@ export function MultiSiteRealtime({ data }: { data: RealtimeSummaryResponse }) {
         ))}
       </div>
 
-      <div className="space-y-4">
+      <LiveBreakdown data={data} tab={tab} onTabChange={setTab} />
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(270px,.55fr)]">
         <article className="min-w-0 overflow-hidden rounded-xl border border-[#dadce0] bg-white p-5">
           <header className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
             <div className="flex items-start gap-2.5">
@@ -122,9 +124,7 @@ export function MultiSiteRealtime({ data }: { data: RealtimeSummaryResponse }) {
           </div>
         </article>
 
-        <LiveBreakdown data={data} tab={tab} onTabChange={setTab} />
-
-        <article className="flex min-h-[220px] flex-col rounded-xl border border-[#dadce0] bg-gradient-to-br from-white to-[#fffaf0] p-5">
+        <article className="flex min-h-[340px] flex-col rounded-xl border border-[#dadce0] bg-gradient-to-br from-white to-[#fffaf0] p-5">
           <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#fef7e0] text-[#e37400]">
             <Sparkles className="h-5 w-5" />
           </span>

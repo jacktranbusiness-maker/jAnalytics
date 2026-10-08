@@ -278,4 +278,10 @@ class GoogleAnalyticsClient:
 
             result["rows"].append(parsed_row)
 
+        if not result.get("totals") and not result["dimension_headers"] and len(result["rows"]) == 1:
+            result["totals"] = [{"value": result["rows"][0]["metrics"][header["name"]]} for header in result["metric_headers"]]
+        metadata = getattr(response, "metadata", None)
+        time_zone = getattr(metadata, "time_zone", "") if metadata else ""
+        if time_zone:
+            result["metadata"]["time_zone"] = time_zone
         return result

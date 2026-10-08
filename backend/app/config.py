@@ -163,7 +163,7 @@ class Settings:
         )
 
         self.api_title: str = "jAnalytics Multi-site GA4 API"
-        self.api_version: str = "0.2.0"
+        self.api_version: str = "0.3.0"
 
     @property
     def is_real_mode(self) -> bool:

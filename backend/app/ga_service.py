@@ -420,14 +420,17 @@ def run_custom_report(
     limit: int = 10,
     order_by: Optional[str] = None,
     site_id: Optional[str] = None,
+    previous: bool = False,
 ) -> Dict:
     """Pass-through to the underlying ``run_report`` for ad-hoc queries."""
     if not metrics:
         metrics = ["sessions"]
+    if previous and days not in (7, 30, 90):
+        raise ValueError("Previous-period reports support 7, 30 or 90 days")
     analyzer = get_analyzer(site_id)
     return analyzer.client.run_report(
-        start_date="{}daysAgo".format(days),
-        end_date="yesterday",
+        start_date="{}daysAgo".format(days * 2 if previous else days),
+        end_date="{}daysAgo".format(days + 1) if previous else "yesterday",
         metrics=metrics,
         dimensions=dimensions,
         limit=limit,

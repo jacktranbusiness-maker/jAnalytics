@@ -185,8 +185,11 @@ def report(
         None, description="Metric/dimension to sort by (prefix - desc, + asc)"
     ),
     site: Optional[str] = SiteQuery,
+    previous: bool = Query(False, description="Previous completed period (7, 30 or 90 days only)"),
 ):
     """Ad-hoc GA4 report (raw rows). Useful for custom widgets."""
+    if previous and days not in (7, 30, 90):
+        raise HTTPException(status_code=400, detail="Previous-period reports support 7, 30 or 90 days")
     metric_list = [m.strip() for m in metrics.split(",") if m.strip()]
     dim_list = (
         [d.strip() for d in dimensions.split(",") if d.strip()]
@@ -201,6 +204,7 @@ def report(
         limit=limit,
         order_by=order_by,
         site_id=site,
+        previous=previous,
     )
 
 
@@ -211,4 +215,5 @@ def root():
         "version": settings.api_version,
         "mode": "mock" if settings.mock_mode else "real",
         "docs": "/docs",
+        "capabilities": ["previous_period", "report_timezone"],
     }
